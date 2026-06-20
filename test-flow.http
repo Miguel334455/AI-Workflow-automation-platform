@@ -1,0 +1,92 @@
+### AI Workflow Automation Platform — End-to-End Test Flow
+### Use with the VS Code "REST Client" extension, or copy curl-equivalent commands.
+### Run `docker compose up --build` first, then execute requests top to bottom.
+
+@workflowService = http://localhost:5001
+@triggerService = http://localhost:5002
+@executionService = http://localhost:5003
+
+### 1. Log in (dev-only endpoint, accepts any non-empty credentials) and grab the token
+POST {{workflowService}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "demo-user",
+  "password": "anything"
+}
+
+### 2. Create a workflow: Manual Trigger -> AI Summarize -> Email Notification
+### Replace {{token}} with the token from step 1's response.
+POST {{workflowService}}/api/workflows
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "name": "Summarize and Notify",
+  "description": "Summarizes input text with AI, then emails the result",
+  "nodes": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "Trigger",
+      "type": "trigger",
+      "configJson": "{}",
+      "order": 0
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "Summarize Text",
+      "type": "ai",
+      "configJson": "{\"taskType\":\"summarize\",\"prompt\":\"Summarize the following text in 2 sentences.\"}",
+      "order": 1
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "Email Result",
+      "type": "notification",
+      "configJson": "{\"channel\":\"Email\",\"target\":\"someone@example.com\",\"subject\":\"Your summary is ready\",\"body\":\"See attached summary.\"}",
+      "order": 2
+    }
+  ],
+  "connections": [
+    {
+      "fromNodeId": "00000000-0000-0000-0000-000000000001",
+      "toNodeId": "00000000-0000-0000-0000-000000000002"
+    },
+    {
+      "fromNodeId": "00000000-0000-0000-0000-000000000002",
+      "toNodeId": "00000000-0000-0000-0000-000000000003"
+    }
+  ]
+}
+
+### 3. Activate the workflow (use the "id" from step 2's response)
+POST {{workflowService}}/api/workflows/{{workflowId}}/activate?active=true
+Authorization: Bearer {{token}}
+
+### 4. Create a manual trigger for the workflow
+POST {{triggerService}}/api/triggers
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "workflowId": "{{workflowId}}",
+  "type": 0,
+  "configJson": "{}"
+}
+
+### 5. Fire the trigger (use the "id" from step 4's response as {{triggerId}})
+POST {{triggerService}}/api/triggers/{{triggerId}}/fire
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "payloadJson": "{\"text\":\"Long article text to summarize goes here...\"}"
+}
+
+### 6. Check run status (use the "runId" from step 5's response)
+GET {{executionService}}/api/runs/{{runId}}
+Authorization: Bearer {{token}}
+
+### 7. List all runs for the workflow
+GET {{executionService}}/api/runs?workflowId={{workflowId}}
+Authorization: Bearer {{token}}
